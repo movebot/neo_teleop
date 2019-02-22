@@ -147,18 +147,18 @@ void TeleopNeo::sendCmd()
   {
     if(smooth == true)
     {
-	    //Array neu anordnen
+	    //Array neu anordnen -- Rearranging the array
 	    for(int i = 18; i >= 0; i--)
 	    {
 		last_joy_commands_x[i+1] = last_joy_commands_x[i];
 		last_joy_commands_y[i+1] = last_joy_commands_y[i];
 		last_joy_commands_z[i+1] = last_joy_commands_z[i];
 	    }
-	    //neuen wert in position 0 schreiben
+	    //neuen wert in position 0 schreiben -- Set new value in position 0
 	    last_joy_commands_x[0] = joy_command_x;
 	    last_joy_commands_y[0] = joy_command_y;
 	    last_joy_commands_z[0] = joy_command_z;
-	    //mittelwert bilden
+	    //mittelwert bilden -- Finding mean value 
 	    vel.angular.z = 0;
 	    vel.linear.x = 0;
 	    vel.linear.y = 0;
