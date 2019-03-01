@@ -11,6 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
 )
 
+catkin_package()
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -108,8 +110,8 @@ include_directories(
 # )
 ## Declare a cpp executable
 # add_executable(neo_watchdogs_node src/neo_watchdogs_node.cpp)
-add_executable(${PROJECT_NAME} ros/src/${PROJECT_NAME}.cpp)
-add_executable(${PROJECT_NAME}_keyboard ros/src/${PROJECT_NAME}_keyboard.cpp)
+add_executable(${PROJECT_NAME} src/${PROJECT_NAME}.cpp)
+add_executable(${PROJECT_NAME}_keyboard src/${PROJECT_NAME}_keyboard.cpp)
 
 
 target_link_libraries(${PROJECT_NAME}_keyboard ${catkin_LIBRARIES})
