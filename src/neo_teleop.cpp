@@ -32,179 +32,134 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-
 #include <ros/ros.h>
 #include <sensor_msgs/Joy.h>
 #include <geometry_msgs/Twist.h>
 
-class TeleopNeo
-{
+
+class NeoTeleop {
 public:
-  TeleopNeo();
-  ros::NodeHandle nh_;
-  void sendCmd();
-  double l_scale_x, l_scale_y, a_scale_z;
-  double joy_command_x;
-  double joy_command_y;
-  double joy_command_z;
-  double last_joy_commands_x[20];
-  double last_joy_commands_y[20]; 
-  double last_joy_commands_z[20];
+	NeoTeleop();
+
+	void send_cmd();
+
+protected:
+	void joy_callback(const sensor_msgs::Joy::ConstPtr& joy);
+
 private:
-  void joyCallback(const sensor_msgs::Joy::ConstPtr& joy);
-  bool smooth;
-  int linear_x, linear_y, angular_z;
-  ros::Publisher vel_pub_;
-  ros::Subscriber joy_sub_;
-  geometry_msgs::Twist vel;
-  ros::Time lastCmd;
-  ros::Duration timeOut;
-  bool activeJoy;
-  bool deadman;
-  int deadman_button;
+	ros::NodeHandle nh;
+
+	ros::Publisher vel_pub;
+	ros::Subscriber joy_sub;
+	geometry_msgs::Twist cmd_vel;
+
+	double linear_scale_x = 0;
+	double linear_scale_y = 0;
+	double angular_scale_z = 0;
+	double smooth_factor = 1;
+	double joy_timeout = 0;
+	int axis_linear_x = -1;
+	int axis_linear_y = -1;
+	int axis_angular_z = -1;
+	int deadman_button = -1;
+
+	ros::Time last_joy_time;
+	double joy_command_x = 0;
+	double joy_command_y = 0;
+	double joy_command_z = 0;
+
+	bool is_active = false;
+	bool is_deadman_pressed = false;
+
 };
 
-
-TeleopNeo::TeleopNeo():
-  linear_x(1), linear_y(0), angular_z(2)
+NeoTeleop::NeoTeleop()
 {
-  activeJoy = false;
-  deadman = false;
-  smooth = true;
-  lastCmd = ros::Time(0);
-  double timeout;
-  joy_command_x = 0;
-  joy_command_y = 0;
-  joy_command_z = 0;
-  for(int i = 0; i < 20; i++)
-  {
-	last_joy_commands_x[i] = 0;
-	last_joy_commands_y[i] = 0;
-	last_joy_commands_z[i] = 0;
-  }
-  if(nh_.hasParam("smooth"))
-  {
-  	nh_.getParam("smooth", smooth);
-	ROS_INFO("smooth: %i", smooth);
-  }
-  else
-  {
-  	ROS_INFO("smooth nicht gesetzt, verwende Standard: True");
-  	smooth = true;
-  }
-  if(nh_.hasParam("timeOut"))
-  {
-  	nh_.getParam("timeOut", timeout);
-  }
-  else
-  {
-  	ROS_INFO("kein TimeOut gesetzt, verwende Standard");
-  	timeout = 1.0;
-  }
-  if(nh_.hasParam("deadman_button"))
-  {
-  	nh_.getParam("deadman_button", deadman_button);
-  }
-  else
-  {
-  	ROS_INFO("kein deadmanbutton gesetzt, verwende Standard");
-  	deadman_button = 5;
-  }
-  ROS_INFO("TimeOut: %f ", timeout);
-  timeOut = ros::Duration(timeout);
-  nh_.param("axis_linear_x", linear_x, linear_x);
-  nh_.param("scale_linear_x", l_scale_x, l_scale_x);
-  nh_.param("axis_linear_y", linear_y, linear_y);
-  nh_.param("scale_linear_y", l_scale_y, l_scale_y);
-  nh_.param("axis_angular_z", angular_z, angular_z);
-  nh_.param("scale_angular_z", a_scale_z, a_scale_z);
- 
-  ROS_INFO("DeadmanButton: %i ", deadman_button);
+	nh.param("scale_linear_x", linear_scale_x, 0.4);
+	nh.param("scale_linear_y", linear_scale_y, 0.4);
+	nh.param("scale_angular_z", angular_scale_z, 0.6);
+	nh.param("axis_linear_x", axis_linear_x, 1);
+	nh.param("axis_linear_y", axis_linear_y, 0);
+	nh.param("axis_angular_z", axis_angular_z, 2);
+	nh.param("smooth_factor", smooth_factor, 0.2);
+	nh.param("deadman_button", deadman_button, 5);
+	nh.param("joy_timeout", joy_timeout, 1.);
 
-  ROS_INFO("started joystick drive with ");
+	vel_pub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
 
-  vel_pub_ = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
-
-
-  joy_sub_ = nh_.subscribe<sensor_msgs::Joy>("/joy", 10, &TeleopNeo::joyCallback, this);
-
+	joy_sub = nh.subscribe<sensor_msgs::Joy>("/joy", 10, &NeoTeleop::joy_callback, this);
 }
 
-void TeleopNeo::joyCallback(const sensor_msgs::Joy::ConstPtr& joy)
+void NeoTeleop::joy_callback(const sensor_msgs::Joy::ConstPtr& joy)
 {
-  activeJoy = true;
-  deadman = (bool)joy->buttons[deadman_button];
-  lastCmd = ros::Time::now();
-  joy_command_z = a_scale_z*joy->axes[angular_z];
-  joy_command_x = l_scale_x*joy->axes[linear_x];
-  joy_command_y = l_scale_y*joy->axes[linear_y];
-  
+	is_active = true;
+	last_joy_time = ros::Time::now();
+
+	if(deadman_button >= 0 && deadman_button < joy->buttons.size()) {
+		is_deadman_pressed = (bool)joy->buttons[deadman_button];
+	} else {
+		is_deadman_pressed = false;
+	}
+
+	if(axis_linear_x >= 0 && axis_linear_x < joy->axes.size()) {
+		joy_command_x = linear_scale_x * joy->axes[axis_linear_x];
+	}
+	if(axis_linear_y >= 0 && axis_linear_y < joy->axes.size()) {
+		joy_command_y = linear_scale_y * joy->axes[axis_linear_y];
+	}
+	if(axis_angular_z >= 0 && axis_angular_z < joy->axes.size()) {
+		joy_command_z = angular_scale_z * joy->axes[axis_angular_z];
+	}
 }
 
-void TeleopNeo::sendCmd()
+void NeoTeleop::send_cmd()
 {
-  if(deadman == true)
-  {
-    if(smooth == true)
-    {
-	    //Array neu anordnen -- Rearranging the array
-	    for(int i = 18; i >= 0; i--)
-	    {
-		last_joy_commands_x[i+1] = last_joy_commands_x[i];
-		last_joy_commands_y[i+1] = last_joy_commands_y[i];
-		last_joy_commands_z[i+1] = last_joy_commands_z[i];
-	    }
-	    //neuen wert in position 0 schreiben -- Set new value in position 0
-	    last_joy_commands_x[0] = joy_command_x;
-	    last_joy_commands_y[0] = joy_command_y;
-	    last_joy_commands_z[0] = joy_command_z;
-	    //mittelwert bilden -- Finding mean value 
-	    vel.angular.z = 0;
-	    vel.linear.x = 0;
-	    vel.linear.y = 0;
-	    for(int g = 0; g < 20; g++)
-	    {
-		vel.angular.z += last_joy_commands_z[g];
-		vel.linear.x += last_joy_commands_x[g];
-		vel.linear.y += last_joy_commands_y[g];
-	    }
-	    vel.angular.z = (vel.angular.z/20);
-	    vel.linear.x = (vel.linear.x/20);
-	    vel.linear.y = (vel.linear.y/20);
-    }
-    else
-    {
-	vel.angular.z = joy_command_z;
-	vel.linear.x = joy_command_x;
-	vel.linear.y = joy_command_y;
-    }
-    vel_pub_.publish(vel);
-  }
-  else
-  {
-    if(activeJoy)
-    {
-      vel.angular.z = 0;
-      vel.linear.x = 0;
-      vel.linear.y = 0;
-      vel_pub_.publish(vel);
-      activeJoy = false;
-      smooth = false;
-    }
-  }
-};
+	if(is_deadman_pressed)
+	{
+		// smooth inputs
+		cmd_vel.linear.x = joy_command_x * smooth_factor + cmd_vel.linear.x * (1 - smooth_factor);
+		cmd_vel.linear.y = joy_command_y * smooth_factor + cmd_vel.linear.y * (1 - smooth_factor);
+		cmd_vel.angular.z = joy_command_z * smooth_factor + cmd_vel.angular.z * (1 - smooth_factor);
+
+		// publish
+		vel_pub.publish(cmd_vel);
+	}
+	else if(is_active)
+	{
+		if((ros::Time::now() - last_joy_time).toSec() > joy_timeout)
+		{
+			cmd_vel = geometry_msgs::Twist();		// set to all zero
+			is_active = false;
+		}
+		else {
+			// smooth towards zero
+			cmd_vel.linear.x = cmd_vel.linear.x * (1 - smooth_factor);
+			cmd_vel.linear.y = cmd_vel.linear.y * (1 - smooth_factor);
+			cmd_vel.angular.z = cmd_vel.angular.z * (1 - smooth_factor);
+		}
+
+		// publish
+		vel_pub.publish(cmd_vel);
+	}
+}
 
 
 int main(int argc, char** argv)
 {
-  
-  ros::init(argc, argv, "teleop_Neo");
-  TeleopNeo teleop_Neo;
-  ros::Rate loop_rate(50); // Hz
-  while(teleop_Neo.nh_.ok())
-  {
-    teleop_Neo.sendCmd();
-    loop_rate.sleep();
-    ros::spinOnce();
-  }
+	ros::init(argc, argv, "neo_teleop");
+
+	NeoTeleop node;
+
+	ros::Rate loop_rate(50); // Hz
+
+	while(ros::ok())
+	{
+		node.send_cmd();
+
+		loop_rate.sleep();
+
+		ros::spinOnce();
+	}
+
+	return 0;
 }
