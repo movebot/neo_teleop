@@ -92,13 +92,15 @@ NeoTeleop::NeoTeleop()
 
 void NeoTeleop::joy_callback(const sensor_msgs::Joy::ConstPtr& joy)
 {
-	is_active = true;
 	last_joy_time = ros::Time::now();
 
 	if(deadman_button >= 0 && deadman_button < joy->buttons.size()) {
 		is_deadman_pressed = (bool)joy->buttons[deadman_button];
 	} else {
 		is_deadman_pressed = false;
+	}
+	if(is_deadman_pressed) {
+		is_active = true;
 	}
 
 	if(axis_linear_x >= 0 && axis_linear_x < joy->axes.size()) {
